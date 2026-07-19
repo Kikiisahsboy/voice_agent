@@ -1,0 +1,21 @@
+name: voice_agent
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - flask>=3.0
+      - flask-cors
+      - numpy
+      - pyaudio
+      - vosk
+      - edge-tts
+      - miniaudio
+      - requests
+      - pyyaml
+      - chromadb>=0.4.0
+      - sentence-transformers
+      - mcp>=1.0.0
+      - webrtcvad
