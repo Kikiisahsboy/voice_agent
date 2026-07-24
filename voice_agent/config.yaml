@@ -1,0 +1,96 @@
+# Voice Agent 配置文件
+
+server:
+  host: "0.0.0.0"
+  port: 8081
+  debug: false
+
+asr:
+  engine: "vosk"
+  vosk:
+    model_path: "D:/vosk-model/vosk-model-cn-kaldi-multicn-0.15"
+    sample_rate: 16000
+
+llm:
+  provider: "ollama"
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "qwen3:8b"
+    temperature: 0.7
+    num_predict: 2048
+    timeout: 120.0
+  react:
+    max_rounds: 5
+    tool_call_timeout: 30.0
+    enable_planning: true
+    enable_reflection: true
+    tool_retry_limit: 2
+
+tts:
+  engine: "edge-tts"
+  edge_tts:
+    voice: "zh-CN-XiaoxiaoNeural"
+    sample_rate: 24000
+  streaming:
+    min_chunk_chars: 20
+    sentence_delimiters: "。！？\n！？，"
+
+memory:
+  short_term:
+    max_turns: 10
+  long_term:
+    enabled: true
+    chroma:
+      persist_dir: "./voice_agent/chroma_data"
+      collection_name: "conversation_memory_v2"
+    embedding:
+      provider: "sentence_transformers"
+      model: "BAAI/bge-small-zh-v1.5"
+    retrieval:
+      top_k: 3
+      similarity_threshold: 0.5
+    decay:
+      enabled: true
+      max_age_days: 30
+      max_total_memories: 1000
+
+skills:
+  # autoload：列出所有 *_skill.py 模块的完整 import 路径
+  # autoload_skills() 会反射加载模块中所有以 skill_ 开头的 Skill 实例
+  autoload:
+    - "voice_agent.agent.skills.time_skill"
+    - "voice_agent.agent.skills.calculator_skill"
+    - "voice_agent.agent.skills.memory_skill"
+    - "voice_agent.agent.skills.knowledge_skill"
+    - "voice_agent.agent.skills.weather_skill"
+    - "voice_agent.agent.skills.web_search_skill"
+
+mcp:
+  client:
+    enabled: false
+    servers: []
+  server:
+    enabled: false
+    transport: "stdio"
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  frames_per_buffer: 2048
+  vad:
+    aggressiveness: 3
+    frame_ms: 30
+    silence_timeout_seconds: 1.5
+
+conversation:
+  system_prompt: |
+    你是一个贴心的智能语音助手。你可以使用工具查询时间、进行计算、搜索记忆、检索本地知识库、查询天气、联网搜索。
+
+    【重要】在系统提示词末尾，如果附带了"用户画像"或"历史对话记忆"，那是关于用户的已知信息，
+    你应该自然地引用它们来回答问题，让对话更有延续性。这些是你已经知道的信息，不需要再次搜索。
+
+    回复要求：简洁自然，每次不超过100字。
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s [%(levelname)s] %(name)s [trace=%(trace_id)s]: %(message)s"

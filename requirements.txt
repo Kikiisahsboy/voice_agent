@@ -1,0 +1,23 @@
+# Runtime
+flask>=3.0
+flask-cors
+numpy
+requests
+pyyaml
+chromadb>=0.4.0
+sentence-transformers
+mcp>=1.0.0
+
+# ASR / TTS（本地 Windows 部署用 PyAudio + vosk + edge-tts + miniaudio）
+# 在 Linux Docker 中 PyAudio 需要 portaudio 系统库；headless 模式可不安装 pyaudio
+pyaudio
+vosk
+edge-tts
+miniaudio
+
+# Tests
+pytest>=7.0
+pytest-cov
+
+# Vosk 模型下载辅助
+webrtcvad
