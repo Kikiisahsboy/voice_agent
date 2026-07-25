@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import queue
+import sys
 import threading
 import time
 import wave
@@ -24,6 +25,16 @@ if _PROJECT_ROOT not in sys.path:
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+
+
+@app.after_request
+def _no_cache_static(resp):
+    """避免浏览器缓存前端文件，方便开发期快速迭代。"""
+    if resp.mimetype and ('html' in resp.mimetype or 'javascript' in resp.mimetype or 'css' in resp.mimetype):
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+    return resp
 CORS(app)
 
 # 全局服务实例
