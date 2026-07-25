@@ -41,8 +41,8 @@ body {
 .header .dot.yellow { background:#febc2e; }
 .header .dot.green { background:#28c840; }
 .header .title { flex:1; text-align:center; font-size:15px; font-weight:600; }
-.header .menu-btn { width: 28px; height: 28px; border-radius: 50%; border:none; background:transparent; cursor:pointer; color:var(--sub); font-size:18px; }
-.header .menu-btn:hover { background:rgba(0,0,0,0.06); color:var(--text); }
+.header .menu-btn { display:flex; align-items:center; gap:4px; padding:0 12px; height:30px; border-radius:15px; border:none; background:rgba(0,0,0,0.04); cursor:pointer; color:var(--text); font-size:13px; font-weight:500; }
+.header .menu-btn:hover { background:rgba(0,0,0,0.08); }
 
 .status-bar {
   display:flex; align-items:center; gap:6px;
@@ -149,8 +149,8 @@ body {
   <div class="header">
     <div class="dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
     <div class="title">Voice Agent</div>
-    <button class="btn stop" id="btnStop" style="display:none;width:28px;height:28px;font-size:14px;" title="停止">&#x23F9;</button>
-    <button class="menu-btn" id="btnMenu" title="面板">&#x2630;</button>
+    <button class="btn stop" id="btnStop" style="display:none;width:30px;height:30px;font-size:13px;border-radius:15px;" title="停止">&#x23F9;</button>
+    <button class="menu-btn" id="btnMenu" title="设置 / 记忆管理">⚙ 设置</button>
   </div>
   <div class="status-bar" id="statusBar">
     <span class="indicator idle"></span>
