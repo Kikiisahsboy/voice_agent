@@ -144,6 +144,16 @@ def main():
     )
     memory_manager.set_system_prompt(cfg["conversation"]["system_prompt"])
 
+    # 启动时跑一次衰减，清理过期 / 超量记忆
+    try:
+        decay_cfg = mem_cfg.get("long_term", {}).get("decay", {})
+        chroma_store.decay(
+            max_age_days=decay_cfg.get("max_age_days", 90),
+            max_total=decay_cfg.get("max_total", 1000),
+        )
+    except Exception as e:
+        logger.warning("启动期记忆衰减失败（继续运行）: %s", e)
+
     # ── 6. Skill 系统（autoload）─────────────────────
     from voice_agent.agent.skill_manager import SkillManager
     from voice_agent.agent.skills_autoloader import autoload_skills
@@ -222,6 +232,7 @@ def main():
         llm_client=llm_client,
         memory_manager=memory_manager,
         document_rag=document_rag,
+        chroma_store=chroma_store,
     )
 
     port = args.port or cfg["server"]["port"]

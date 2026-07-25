@@ -158,6 +158,47 @@ class ChromaMemoryStore:
     def forget(self, memory_id: str):
         self._collection.delete(ids=[memory_id])
 
+    def list_all(self, limit: int = 200) -> list[dict]:
+        """列出全部记忆（含 id / text / metadata），按 timestamp 倒序。
+
+        供前端记忆管理面板 / 调试使用。
+        """
+        if self._collection.count() == 0:
+            return []
+        data = self._collection.get(limit=limit)
+        if not data["ids"]:
+            return []
+        items: list[dict] = []
+        for i, mid in enumerate(data["ids"]):
+            items.append({
+                "id": mid,
+                "text": data["documents"][i] if data["documents"] else "",
+                "metadata": dict(data["metadatas"][i] or {}) if data["metadatas"] else {},
+            })
+        items.sort(key=lambda x: x["metadata"].get("timestamp", 0), reverse=True)
+        return items
+
+    def forget_by_text(self, keyword: str) -> int:
+        """按关键字模糊匹配删除（任一记忆文本包含 keyword 即删）。
+
+        Returns:
+            删除条数。
+        """
+        if not keyword or self._collection.count() == 0:
+            return 0
+        data = self._collection.get()
+        if not data["ids"]:
+            return 0
+        to_delete = [
+            mid for i, mid in enumerate(data["ids"])
+            if keyword in (data["documents"][i] or "")
+        ]
+        if to_delete:
+            self._collection.delete(ids=to_delete)
+            logger.info("按关键字 '%s' 删除 %d 条记忆", keyword, len(to_delete))
+        return len(to_delete)
+
+
     def decay(self, max_age_days: int = 30, max_total: int = 1000):
         """删除过旧记忆和超出上限的记忆。"""
         count = self._collection.count()

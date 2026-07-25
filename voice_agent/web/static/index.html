@@ -131,6 +131,16 @@ body {
 .side-panel textarea { width:100%; min-height:80px; padding:8px; border-radius:8px; border:1px solid var(--border); font-family:inherit; font-size:13px; resize:vertical; }
 .side-panel button.action { background:var(--blue); color:#fff; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; margin-top:6px; }
 .side-panel .stats { font-size:12px; color:var(--sub); }
+.side-panel .memory-toolbar { display:flex; gap:6px; margin-bottom:6px; }
+.side-panel .memory-toolbar input { flex:1; padding:6px 10px; border-radius:8px; border:1px solid var(--border); font-size:12px; font-family:inherit; }
+.side-panel .memory-item { display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--border); }
+.side-panel .memory-item .memory-text { flex:1; font-size:12px; color:var(--text); word-break:break-word; }
+.side-panel .memory-item .mem-del { width:22px; height:22px; border:none; background:rgba(255,59,48,0.1); color:var(--red); border-radius:50%; cursor:pointer; font-size:14px; line-height:1; }
+.side-panel .memory-item .mem-del:hover { background:var(--red); color:#fff; }
+.side-panel .memory-tag { font-size:10px; padding:2px 6px; border-radius:8px; flex-shrink:0; font-weight:600; }
+.side-panel .tag-fact { background:rgba(0,113,227,0.12); color:var(--blue); }
+.side-panel .tag-preference { background:rgba(52,199,89,0.14); color:#1e8a3d; }
+.side-panel .tag-event { background:rgba(142,142,147,0.18); color:#5e5e63; }
 </style>
 </head>
 <body>
@@ -158,7 +168,11 @@ body {
 <div class="side-panel" id="sidePanel">
   <h3>用户画像</h3>
   <div id="profileArea" class="stats">加载中...</div>
-  <h3>最近长期记忆</h3>
+  <h3>长期记忆（可删除）</h3>
+  <div class="memory-toolbar">
+    <input id="memKeyword" placeholder="按关键字批量删除..." />
+    <button class="action" id="btnMemDelByKw">删除</button>
+  </div>
   <div id="memoryArea" class="stats">加载中...</div>
   <h3>文档知识库 (RAG)</h3>
   <div class="stats" id="ragStats">加载中...</div>
@@ -540,7 +554,7 @@ async function refreshPanel() {
   try {
     const [prof, mem, stats, skills] = await Promise.all([
       fetch('/api/memory/profile').then(r=>r.json()),
-      fetch('/api/memory/recent?limit=10').then(r=>r.json()),
+      fetch('/api/memory/list?limit=50').then(r=>r.json()),
       fetch('/api/rag/stats').then(r=>r.json()),
       fetch('/api/skills').then(r=>r.json()),
     ]);
@@ -548,12 +562,45 @@ async function refreshPanel() {
       ? Object.entries(prof.profile).map(([k,v]) => `<div class="profile-item">${escapeHtml(k)}: ${escapeHtml(v)}</div>`).join('')
       : '（暂无）';
     document.getElementById('memoryArea').innerHTML = mem.memories && mem.memories.length
-      ? mem.memories.map(m => `<div class="memory-item">${escapeHtml(m.slice(0,80))}</div>`).join('')
-      : '（暂无）';
+      ? mem.memories.map(m => `
+          <div class="memory-item">
+            <span class="memory-tag tag-${escapeHtml(m.metadata.memory_type || 'event')}">${escapeHtml(m.metadata.memory_type || 'event')}</span>
+            <span class="memory-text">${escapeHtml((m.text||'').slice(0,80))}</span>
+            <button class="mem-del" data-id="${escapeHtml(m.id)}" title="删除此条">×</button>
+          </div>`).join('')
+      : '（暂无，共 0 条）';
+    document.getElementById('memoryArea').querySelectorAll('.mem-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('确定删除这条记忆？')) return;
+        const r = await fetch('/api/memory/delete', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({id: btn.dataset.id}),
+        });
+        const j = await r.json();
+        if (j.ok) refreshPanel();
+        else alert('删除失败: ' + (j.error || 'unknown'));
+      });
+    });
     document.getElementById('ragStats').textContent = `当前 ${stats.chunks || 0} 个文档分块`;
     document.getElementById('skillList').textContent = (skills.skills || []).join(', ');
   } catch(e) { console.warn(e); }
 }
+
+document.getElementById('btnMemDelByKw').addEventListener('click', async () => {
+  const kw = document.getElementById('memKeyword').value.trim();
+  if (!kw) return alert('请输入关键字');
+  if (!confirm(`删除所有包含 "${kw}" 的记忆？`)) return;
+  const r = await fetch('/api/memory/delete', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({keyword: kw}),
+  });
+  const j = await r.json();
+  if (j.ok) {
+    alert(`已删除 ${j.deleted} 条`);
+    document.getElementById('memKeyword').value = '';
+    refreshPanel();
+  } else alert('删除失败: ' + (j.error || 'unknown'));
+});
 
 document.getElementById('btnRagLoad').addEventListener('click', async () => {
   const text = document.getElementById('ragText').value.trim();

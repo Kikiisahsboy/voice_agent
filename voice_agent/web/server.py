@@ -33,6 +33,7 @@ _tts = None
 _llm = None
 _memory_manager = None
 _document_rag = None
+_chroma_store = None
 
 # 每个请求的 TTS 中断标志（用于 barge-in）
 _abort_flags: dict[str, threading.Event] = {}
@@ -46,16 +47,19 @@ def init_services(
     llm_client,
     memory_manager=None,
     document_rag=None,
+    chroma_store=None,
 ):
-    global _orchestrator, _asr, _tts, _llm, _memory_manager, _document_rag
+    global _orchestrator, _asr, _tts, _llm, _memory_manager, _document_rag, _chroma_store
     _orchestrator = orchestrator
     _asr = asr_service
     _tts = tts_service
     _llm = llm_client
     _memory_manager = memory_manager
     _document_rag = document_rag
-    logger.info("Web 服务已绑定 Agent 实例 (RAG: %s)",
-                "yes" if document_rag else "no")
+    _chroma_store = chroma_store
+    logger.info("Web 服务已绑定 Agent 实例 (RAG: %s, Mem: %s)",
+                "yes" if document_rag else "no",
+                "yes" if chroma_store else "no")
 
 
 def _sse_event(data: dict) -> str:
@@ -376,6 +380,37 @@ def memory_profile():
     if _memory_manager is None:
         return jsonify({"profile": {}})
     return jsonify({"profile": _memory_manager.get_user_profile()})
+
+@app.route("/api/memory/list", methods=["GET"])
+def memory_list():
+    """列出全部长期记忆（含 id + text + metadata）。"""
+    if _chroma_store is None:
+        return jsonify({"enabled": False, "memories": []})
+    items = _chroma_store.list_all(limit=int(request.args.get("limit", 200)))
+    return jsonify({"enabled": True, "count": len(items), "memories": items})
+
+
+@app.route("/api/memory/delete", methods=["POST"])
+def memory_delete():
+    """删除记忆：二选一传 id 或 keyword。
+
+    Body: {"id": "mem_xxx"} 或 {"keyword": "青霉素"}
+    """
+    if _chroma_store is None:
+        return jsonify({"error": "记忆库未启用"}), 400
+
+    data = request.get_json(force=True) or {}
+    mid = data.get("id")
+    keyword = data.get("keyword")
+    if mid:
+        _chroma_store.forget(mid)
+        return jsonify({"ok": True, "deleted": 1, "mode": "id"})
+    if keyword:
+        n = _chroma_store.forget_by_text(keyword)
+        return jsonify({"ok": True, "deleted": n, "mode": "keyword"})
+    return jsonify({"error": "id 或 keyword 必填其一"}), 400
+
+
 
 
 @app.route("/")

@@ -19,6 +19,16 @@ logger = logging.getLogger(__name__)
 
 _VALID_MEMORY_TYPES = {"fact", "preference", "event"}
 
+# ── 质量门控配置 ──
+_MIN_USEFUL_LEN = 3  # 短于此长度的内容拒绝入库
+_REJECT_CHITCHAT = {
+    # 寒暄/客套/无关指令 — 直接丢弃，不进入向量库
+    "你好", "您好", "再见", "bye", "hi", "hello",
+    "哈哈", "呵呵", "嗯嗯", "好的", "收到",
+    "测试一下", "测试", "试试",
+}
+_DEDUP_SCORE_THRESHOLD = 0.95  # 与已有记忆相似度超过此值 → 跳过
+
 
 class MemoryManager:
     """双层 + 分类 + 画像记忆管理器。"""
@@ -117,18 +127,50 @@ class MemoryManager:
         memory_type: str = "event",
         metadata: Optional[dict] = None,
     ) -> Optional[str]:
-        """存储一条长期记忆。
+        """存储一条长期记忆（带质量门控）。
+
+        拒绝：① 长度过短 ② 命中寒暄黑名单 ③ 与已有记忆高度相似。
 
         Args:
             text: 记忆内容
             memory_type: fact / preference / event
             metadata: 额外元数据
+
+        Returns:
+            新写入的 memory_id；若被门控拒绝则返回 None。
         """
         if not self._long_term_enabled:
             return None
+
+        text = (text or "").strip()
+        if not text:
+            return None
+
+        # ① 长度过滤
+        if len(text) < _MIN_USEFUL_LEN:
+            logger.debug("记忆过短被丢弃: '%s'", text)
+            return None
+
+        # ② 黑名单过滤（仅对非 event 类目生效 — event 可记录具体对话事件）
+        if memory_type in ("fact", "preference"):
+            for bad in _REJECT_CHITCHAT:
+                if bad in text:
+                    logger.debug("寒暄/无关内容被丢弃: '%s'", text)
+                    return None
+
         if memory_type not in _VALID_MEMORY_TYPES:
             logger.warning("未知记忆类型 '%s'，回退为 event", memory_type)
             memory_type = "event"
+
+        # ③ 去重：与已有最高相似度对比
+        try:
+            existing = self._chroma.search(text, top_k=1, threshold=0.0)
+            if existing and existing[0].get("score", 0) >= _DEDUP_SCORE_THRESHOLD:
+                logger.debug("重复记忆跳过: '%s' ≈ '%s'",
+                             text, existing[0].get("text", "")[:30])
+                return None
+        except Exception as e:
+            logger.debug("去重检查失败（继续写入）: %s", e)
 
         meta = dict(metadata or {})
         meta["memory_type"] = memory_type
@@ -234,13 +276,21 @@ class MemoryManager:
             {
                 "role": "system",
                 "content": (
-                    "你是信息抽取助手。请从对话中抽取结构化信息，"
-                    "严格输出 JSON，格式：\n"
+                    "你是信息抽取助手。请从对话中抽取结构化信息。"
+                    "严格只输出 JSON：\n"
                     '{"summary": "对话的一句话摘要（≤50字）",'
                     '"facts": ["事实1", ...],'
                     '"preferences": ["用户偏好1", ...],'
-                    '"profile_updates": {"key": "value", ...}}\n'
-                    "如果某类没有就返回空数组或空对象。"
+                    '"profile_updates": {"key": "value", ...}}\n\n'
+                    "质量规则（务必遵守）：\n"
+                    "1. 只抽取对未来对话**仍有复用价值**的信息。\n"
+                    "2. 以下内容**不要**记入（任何字段都不要写）：\n"
+                    "   - 寒暄/问候/客套（你好、再见、测试一下……）\n"
+                    "   - 单次性事务（帮我算 3+5、查一下今天天气……）\n"
+                    "   - 工具调用原始结果、LLM 自己的输出错误\n"
+                    "   - 用户已表达别记/忘掉/清除记忆的内容\n"
+                    "3. 不确定的事实宁可漏掉，不要写错的。\n"
+                    "4. 如果整段对话都没有值得记的内容，summary 返回空串 \"\" 即可。"
                 ),
             },
             {"role": "user", "content": conversation},
