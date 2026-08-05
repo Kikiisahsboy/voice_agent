@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "description": "Voice Agent Golden Eval 集 — 用于回归评估与 Agent 能力基线。",
+  "cases": [
+    {
+      "id": "calc_basic",
+      "category": "tool_call",
+      "input": "请帮我算一下 123 * 456 等于多少？",
+      "expect": {
+        "tool_called": "calculate",
+        "answer_contains": "56088"
+      }
+    },
+    {
+      "id": "time_basic",
+      "category": "tool_call",
+      "input": "现在几点了？",
+      "expect": {
+        "tool_called": "get_current_time"
+      }
+    },
+    {
+      "id": "weather_basic",
+      "category": "tool_call",
+      "input": "上海今天天气怎么样？",
+      "expect": {
+        "tool_called": "get_weather",
+        "answer_contains_any": ["上海", "天气", "°C", "气温"]
+      }
+    },
+    {
+      "id": "memory_recall",
+      "category": "memory",
+      "input": "你还记得我喜欢什么吗？",
+      "setup": {
+        "preload_long_term": [
+          {"text": "用户喜欢简洁自然的回答", "memory_type": "preference"}
+        ]
+      },
+      "expect": {
+        "answer_contains_any": ["简洁", "自然"]
+      }
+    },
+    {
+      "id": "plan_execute",
+      "category": "planning",
+      "input": "帮我查一下现在的时间，然后算一下 60 秒是几分钟。",
+      "expect": {
+        "tools_called_any": ["get_current_time", "calculate"]
+      }
+    },
+    {
+      "id": "knowledge_rag",
+      "category": "rag",
+      "input": "我们公司的年假政策是什么？",
+      "setup": {
+        "preload_rag": [
+          {
+            "text": "公司年假政策：员工入职满 1 年可享受 10 天带薪年假，满 5 年可享受 15 天。",
+            "source": "handbook.txt"
+          }
+        ]
+      },
+      "expect": {
+        "tool_called": "search_knowledge",
+        "answer_contains_any": ["年假", "10 天", "15 天"]
+      }
+    },
+    {
+      "id": "no_tool_chitchat",
+      "category": "no_tool",
+      "input": "你好呀，今天心情不错。",
+      "expect": {
+        "tools_called_count_max": 0,
+        "answer_min_length": 5
+      }
+    },
+    {
+      "id": "profile_inject",
+      "category": "memory",
+      "input": "你还记得我的名字吗？",
+      "setup": {
+        "preload_profile": {"姓名": "小明"}
+      },
+      "expect": {
+        "answer_contains": "小明"
+      }
+    }
+  ]
+}
