@@ -69,20 +69,89 @@ class ChromaMemoryStore:
 
     # ── 检索 ────────────────────────────────────────────
 
+    # ── where 条件构造 ─────────────────────────────────────
+
+    @staticmethod
+    def build_where(
+        memory_types: Optional[list[str]] = None,
+        time_range: Optional[dict] = None,
+        extra: Optional[dict] = None,
+    ) -> Optional[dict]:
+        """把业务语义的条件转成 ChromaDB 原生 where 语法。
+
+        Args:
+            memory_types: 限定 memory_type ∈ 这些值
+                - 1 个: {"memory_type": "fact"}
+                - 多个: {"memory_type": {"$in": [...]}}
+            time_range: 时间窗口
+                - {"last_accessed_gte": ts} 或 {"timestamp_gte": ts}
+                - {"last_accessed_lte": ts} 或 {"timestamp_lte": ts}
+                多个字段可同时给，自动 $and 拼接
+            extra: 其它已构造好的 ChromaDB where 片段（会被 $and 合并）
+
+        Returns:
+            None / 单条件 / {$and: [...]} 复合条件
+
+        Examples:
+            >>> build_where(memory_types=["fact", "preference"])
+            {'memory_type': {'$in': ['fact', 'preference']}}
+            >>> build_where(time_range={"last_accessed_gte": 1700000000})
+            {'last_accessed': {'$gte': 1700000000}}
+        """
+        conditions: list[dict] = []
+
+        if memory_types:
+            if len(memory_types) == 1:
+                conditions.append({"memory_type": memory_types[0]})
+            else:
+                conditions.append({"memory_type": {"$in": memory_types}})
+
+        if time_range:
+            for key, op in (
+                ("last_accessed_gte", "$gte"),
+                ("last_accessed_lte", "$lte"),
+                ("timestamp_gte", "$gte"),
+                ("timestamp_lte", "$lte"),
+            ):
+                if key in time_range:
+                    field = key.rsplit("_", 1)[0]  # last_accessed_gte -> last_accessed
+                    conditions.append({field: {op: time_range[key]}})
+
+        if extra:
+            # 兼容已经是 {"key": "value"} 或 {"$and": [...]} 的格式
+            if isinstance(extra, dict) and set(extra.keys()) == {"$and"}:
+                conditions.extend(extra["$and"])
+            else:
+                conditions.append(extra)
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
+
     def search(
         self,
         query: str,
         top_k: int = 3,
         threshold: float = 0.5,
         where: Optional[dict] = None,
+        memory_types: Optional[list[str]] = None,
+        time_range: Optional[dict] = None,
     ) -> list[dict]:
         """检索相关记忆。
+
+        支持两种过滤方式（可叠加）：
+            1. 直接传 where：ChromaDB 原生语法
+            2. 传 memory_types / time_range：业务语义，自动 build_where
 
         Args:
             query: 查询文本
             top_k: 返回数量
             threshold: 相似度阈值，低于此分数的结果被过滤
             where: ChromaDB metadata 过滤条件，例 {"memory_type": "fact"}
+            memory_types: 限定记忆类型（自动转 where）
+            time_range: 时间窗口（自动转 where）
 
         Returns:
             [{id, text, score, metadata}, ...] 按 score 降序
@@ -92,12 +161,26 @@ class ChromaMemoryStore:
 
         embedding = self._embedder.encode(query).tolist()
 
+        # 业务参数 → 原生 where
+        built_where = self.build_where(
+            memory_types=memory_types, time_range=time_range
+        )
+        # 合并：业务构造 + 调用方直接传入的 where
+        if where and built_where:
+            final_where = {"$and": [where, built_where]}
+        else:
+            final_where = where or built_where
+
+        # ChromaDB where filter 不能超过 collection 总数，否则会空集
+        collection_count = self._collection.count()
+        fetch_k = min(top_k, collection_count)
+
         kwargs = {
             "query_embeddings": [embedding],
-            "n_results": min(top_k, self._collection.count()),
+            "n_results": fetch_k,
         }
-        if where:
-            kwargs["where"] = where
+        if final_where:
+            kwargs["where"] = final_where
 
         try:
             results = self._collection.query(**kwargs)

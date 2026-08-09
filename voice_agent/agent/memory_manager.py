@@ -183,14 +183,21 @@ class MemoryManager:
         query: str,
         top_k: int = 3,
         memory_types: Optional[list[str]] = None,
+        time_range: Optional[dict] = None,
     ) -> list[str]:
-        """检索长期记忆。可限定类型。"""
+        """检索长期记忆。
+
+        过滤在 ChromaDB 原生层完成（memory_types / time_range 转 where），
+        不再在 Python 层 post-filter，避免过度召回。
+        """
         if not self._long_term_enabled:
             return []
-        results = self._chroma.search(query, top_k=top_k * 2 if memory_types else top_k)
-        if memory_types:
-            results = [r for r in results if r.get("metadata", {}).get("memory_type") in memory_types]
-        results = results[:top_k]
+        results = self._chroma.search(
+            query,
+            top_k=top_k,
+            memory_types=memory_types,
+            time_range=time_range,
+        )
         return [r["text"] for r in results]
 
     def search_long_term_ranked(
@@ -198,14 +205,20 @@ class MemoryManager:
         query: str,
         top_k: int = 3,
         memory_types: Optional[list[str]] = None,
+        time_range: Optional[dict] = None,
     ) -> list[dict]:
-        """返回带分数和 metadata 的检索结果，供 Rerank 使用。"""
+        """返回带分数和 metadata 的检索结果，供 Rerank 使用。
+
+        过滤在 ChromaDB 原生层完成。
+        """
         if not self._long_term_enabled:
             return []
-        results = self._chroma.search(query, top_k=top_k * 3 if memory_types else top_k)
-        if memory_types:
-            results = [r for r in results if r.get("metadata", {}).get("memory_type") in memory_types]
-        return results[:top_k]
+        return self._chroma.search(
+            query,
+            top_k=top_k,
+            memory_types=memory_types,
+            time_range=time_range,
+        )
 
     # ── 上下文组装 ──────────────────────────────────────
 

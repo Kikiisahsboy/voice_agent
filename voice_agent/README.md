@@ -12,6 +12,7 @@
 
 - 🧠 **Plan-and-Execute + ReAct + Reflection** 三层 Agent 范式，自动编排工具调用
 - 💾 **双层记忆 + 三层分类**：滑动窗口短期记忆 + ChromaDB 长期记忆（fact / preference / event）+ 用户画像
+- 🎯 **原生 metadata 过滤**：`memory_types` / `time_range` 直接作用于 ChromaDB where 子句，避免应用层 post-filter 的过度召回
 - 📚 **文档型 RAG**：Hybrid 检索（向量 + BM25 + RRF + Rerank）+ 段落/句子/滑窗分块
 - 🔌 **MCP 双端**：Client 长连接接入外部工具，Server 反向暴露自身能力
 - 🌊 **流式端到端**：LLM token + edge-tts 音频 base64 SSE 实时推送，边生成边播报
@@ -328,6 +329,7 @@ conversation:
 - [x] Plan-and-Execute + ReAct + Reflection 三层 Agent
 - [x] 双层记忆 + fact/preference/event 三层分类
 - [x] 用户画像持续抽取
+- [x] 原生 metadata 过滤（build_where 自动转 ChromaDB where 子句）
 - [x] 文档型 RAG（Hybrid Retriever + DocumentChunker）
 - [x] MCP Client 长连接 + Server 反向暴露
 - [x] 流式 LLM token + edge-tts 音频 SSE 推送
